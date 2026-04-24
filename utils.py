@@ -3,11 +3,31 @@ import torch
 from pathlib import Path
 from stable_pretraining import data as dt
 from lightning.pytorch.callbacks import Callback
+from torchvision.transforms import functional as F
+
+
+class FixedResize(dt.transforms.Transform, dt.transforms.v2.Resize):
+    """Fixed Resize class that works with newer torchvision versions."""
+    
+    def __init__(self, size, interpolation=2, max_size=None, antialias=True, source="image", target="image"):
+        dt.transforms.v2.Resize.__init__(self, size, interpolation, max_size, antialias)
+        self.source = source
+        self.target = target
+    
+    def __call__(self, x):
+        img = self.nested_get(x, self.source)
+        if isinstance(img, list):
+            resized = [F.resize(i, self.size, self.interpolation, self.max_size, self.antialias) for i in img]
+        else:
+            resized = F.resize(img, self.size, self.interpolation, self.max_size, self.antialias)
+        self.nested_set(x, resized, self.target)
+        return x
+
 
 def get_img_preprocessor(source: str, target: str, img_size: int = 224):
     imagenet_stats = dt.dataset_stats.ImageNet
     to_image = dt.transforms.ToImage(**imagenet_stats, source=source, target=target)
-    resize = dt.transforms.Resize(img_size, source=source, target=target)
+    resize = FixedResize(img_size, source=source, target=target)
     return dt.transforms.Compose(to_image, resize)
 
 
